@@ -1,0 +1,3 @@
+site_name: sample
+## https://www.mkdocs.org/user-guide/choosing-your-theme/#readthedocs
+theme: readthedocs

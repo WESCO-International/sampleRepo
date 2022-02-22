@@ -1,0 +1,145 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Main
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events but only for the added braches
+  push:
+    branches: [develop, feature/**, bug/**]
+  pull_request:
+    branches: [main, develop]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# jscpd:ignore-start
+jobs:
+  #performs linting using SuperLinter
+  linter:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [3.9]
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install project
+        run: make install
+      - name: Lint Code Base
+        uses: github/super-linter@v4
+        env:
+          VALIDATE_ALL_CODEBASE: false
+          DEFAULT_BRANCH: main
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  #runs pytest
+  tests_linux:
+    needs: linter
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [3.9]
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install project
+        run: make install
+      - name: Run tests
+        run: make test
+        #uploads coverage.xml for use in other jobs
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: coverage-xml
+          path: "/home/runner/work/template-python/template-python/coverage.xml"
+
+  #enables Behave - BDD (Gherkin syntax) tests
+  behave_linux:
+    needs: tests_linux
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ 3.9 ]
+        os: [ ubuntu-latest ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install project
+        run: make install
+      - name: Run Behave script
+        run: make behave
+
+  #Generates code coverage report in CodeCov
+  Code_Coverage:
+    needs: tests_linux
+    runs-on: ubuntu-latest
+    name: Generate Code Coverage Report
+    steps:
+    - uses: actions/checkout@v2
+    #download coverage.xml report from artifacts
+    - name: Download Coverage Report 
+      uses: actions/download-artifact@v2
+      with:
+        name: coverage-xml
+    - name: Run Code Coverage
+      uses: codecov/codecov-action@v2.1.0
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: coverage.xml # optional - will be variable input in future
+        fail_ci_if_error: true # optional (default = false)
+        verbose: true # optional (default = false)
+
+# jscpd:ignore-end
+
+  # tests_win:
+  #   needs: linter
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       python-version: [3.9]
+  #       os: [windows-latest]
+  #   runs-on: ${{ matrix.os }}
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - uses: actions/setup-python@v2
+  #       with:
+  #         python-version: ${{ matrix.python-version }}
+  #     - name: Install Pip
+  #       run: pip install --user --upgrade pip
+  #     - name: Install project
+  #       run: pip install -e .[test]
+  #     - name: run tests
+  #       run: pytest -s -vvvv -l --tb=long tests
+        
+      #- 
+      #  name: Build docker image
+      #  run: |
+      #    docker build . -t ${{ secrets.REGISTRY_LOGIN_SERVER }}/${{ github.event.repository.name }}:${{ github.sha }}
+      #    #docker push ${{ secrets.REGISTRY_LOGIN_SERVER }}/${{ github.event.repository.name }}:${{ github.sha }}
+  #    - 
+  #      name: Scan the image
+  #      uses: aquasecurity/trivy-action@master
+  #      with:
+  #        #image-ref: 'alpine'
+  #        image-ref: '${{ secrets.REGISTRY_LOGIN_SERVER }}/${{ github.event.repository.name }}:${{ github.sha }}'
+  #        format: 'table'
+  #        exit-code: '1'
+  #        ignore-unfixed: true
+  #        vuln-type: 'os,library'
+  #        severity: 'CRITICAL,HIGH,MEDIUM'
+          
+  #    - name: push image to ACR 
+  #      run: |
+  #        docker push ${{ secrets.REGISTRY_LOGIN_SERVER }}/${{ github.event.repository.name }}:${{ github.sha }}
